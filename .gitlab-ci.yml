@@ -1,0 +1,138 @@
+variables:
+  CA_CERTIFICATE: "$CA_CERTIFICATE"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
+  NIGHTLY_TOOLCHAIN: nightly-x86_64-unknown-linux-gnu
+
+default:
+  cache:  # Cache modules in between jobs
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - ./target/thumbv7em-none-eabihf/debug/build/
+      - ./target/thumbv7em-none-eabihf/debug/deps/
+  before_script:
+    - echo "Instaling rustup..."
+    - curl https://sh.rustup.rs -sSf | sh -s -- -y
+    - . "/usr/local/cargo/env"
+    - rustup override set nightly
+    - rustup component add rust-src --toolchain $NIGHTLY_TOOLCHAIN
+    - rustup component add rustfmt
+    - rustup target add thumbv7em-none-eabihf
+  services:
+    - name: docker:dind
+      alias: docker
+      entrypoint: ["env", "-u", "DOCKER_HOST"]
+      command:
+        - /bin/sh
+        - -c
+        - echo "$CA_CERTIFICATE" > /usr/local/share/ca-certificates/my-ca.crt && update-ca-certificates && dockerd-entrypoint.sh || exit
+
+stages:          # List of stages for jobs, and their order of execution
+  - test
+  - linting
+  - build
+  - docs
+  - deploy
+
+# build-debug:       # This job runs in the build stage, which runs first.
+#   stage: build
+#   tags:
+#     - build
+#   script:
+#     - echo "Compiling the code..."
+#     - cargo build --verbose
+
+build-release:       # This job runs in the build stage, which runs first.
+  image: registry.gitlab.intranet:5050/product-research-and-development/devop/aws/automation/base-images/docker-image:master
+  stage: build
+  needs:
+    - tests
+    - formatting
+    - clippy
+  tags:
+    - quick
+  before_script:
+    # - docker --version || echo 'Docker CLI not found'
+    # - echo "Docker logging into $CI_REGISTRY"
+    # - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    - 'echo "Current dir: $CI_PROJECT_DIR"'
+    - echo "Install ARM GCC tools"
+    - apt-get update -y && apt-get install gcc-arm-none-eabi -y
+  script:
+    - /usr/bin/arm-none-eabi-objcopy --version
+    - echo "Compiling the code..."
+    - source $HOME/.cargo/env && RELEASE=release ./ci.sh build
+  artifacts:
+    paths:
+      - ./target/thumbv7em-none-eabihf/release/stm32h747-async-quickstart.elf
+      - ./target/thumbv7em-none-eabihf/release/stm32h747-async-quickstart.bin
+
+tests:   # This job runs in the test stage.
+  stage: test    # It only starts when the job in the build stage completes successfully.
+  tags:
+    - tests
+  script:
+    - echo "Running unit tests..."
+    - ./test_linux.sh
+
+formatting:
+  stage: linting
+  tags:
+    - linting
+  before_script:
+    - echo "Install ARM GCC tools"
+    - apt-get install gcc-arm-none-eabi -y
+  script:
+    - echo "Compiling debug build..."
+    - cargo build --verbose
+    - echo "Linting code..."
+    - cargo fmt -- --check
+
+clippy:
+  stage: linting
+  tags:
+    - linting
+  before_script:
+    - echo "Install ARM GCC tools"
+    - apt-get install gcc-arm-none-eabi -y
+  script:
+    - rustup install $NIGHTLY_TOOLCHAIN
+    - rustup component add clippy --toolchain $NIGHTLY_TOOLCHAIN
+    - echo "Checking clippy offenses..."
+    - cargo clippy --all -- -D warnings
+
+docs_job:
+  stage: docs
+  needs:
+    - build-release
+  before_script:
+    - . "/usr/local/cargo/env"
+  script:
+    - rustup install $NIGHTLY_TOOLCHAIN
+    - cargo doc
+  artifacts:
+    when: always
+    paths: 
+      - $CI_PROJECT_DIR/target/doc/stm32h747-async-quickstart/*
+
+deploy-job:      # This job runs in the deploy stage.
+  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
+  needs:
+    - build-release
+    # - build-debug
+  when: manual
+  script:
+    - echo "Deploying application..."
+    - exit 0
+    - echo "Application successfully deployed."
+
+job1:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "pipeline"
+  script: echo "This job runs in multi-project pipelines only"
+
+job2:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger"
+  script: echo "This job runs on triggers only"

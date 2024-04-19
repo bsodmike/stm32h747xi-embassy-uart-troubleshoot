@@ -1,0 +1,96 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "rust: cargo build (release)",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "Release Build (probe-rs)",
+            "flashingConfig": {
+                  "flashingEnabled": true,
+            },
+            "chip": "STM32H747XIHx",
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "programBinary": "./target/thumbv7em-none-eabihf/release/stm32-rtos",
+                    "svdFile": "./resources/stm32h747xi/svd/STM32H747_CM7.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true
+                        },
+                        {
+                            "channelNumber": 1,
+                            // Treat data as raw binary data, and do not format in any way
+                            "dataFormat": "BinaryLE"
+                        }
+                    ],
+                    "options": {
+                        "env": {
+                            "DEFMT_LOG": "Trace" // Trace, Debug, Info, Warn, Error
+                        }
+                    },
+                }
+            ],
+            "env": {
+                //!MODIFY (or remove)
+                // If you set this variable, check the VSCode console log window for the location of the log file.
+                "RUST_LOG": "info",
+            },
+            "consoleLogLevel": "Console"
+        },
+        {
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "rust: cargo build (debug)",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "Debug Build (probe-rs)",
+            "flashingConfig": {
+                "flashingEnabled": true,
+            },
+            "chip": "STM32H747XIHx",
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "programBinary": "./target/thumbv7em-none-eabihf/debug/stm32-rtos",
+                    "svdFile": "./resources/stm32h747xi/svd/STM32H747_CM7.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            // Format RTT data as String data
+                            "dataFormat": "String",
+                            // Include host-side timestamps for every line of data transferred from the target RTT output
+                            "showTimestamps": true
+                        },
+                        {
+                            "channelNumber": 1,
+                            // Treat data as raw binary data, and do not format in any way
+                            "dataFormat": "BinaryLE"
+                        }
+                    ],
+                    "options": {
+                        "env": {
+                            "DEFMT_LOG": "Trace" // Trace, Debug, Info, Warn, Error
+                        }
+                    },
+                }
+            ],
+            "env": {
+                //!MODIFY (or remove)
+                // If you set this variable, check the VSCode console log window for the location of the log file.
+                "RUST_LOG": "info",
+            },
+            "consoleLogLevel": "Console"
+        },
+    ]
+}

@@ -1,0 +1,71 @@
+[package]
+name = "stm32-rtos"
+authors = ["Michael de Silva <michael@mwdesilva.com>"]
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+embassy-stm32 = { version = "0.1.0", features = ["defmt", "stm32h747xi-cm7", "memory-x", "unstable-pac", "time-driver-any", "exti", "chrono"], optional = true }
+embassy-sync = { version = "0.5.0", features = ["defmt"] }
+embassy-executor = { version = "0.5.0", features = ["task-arena-size-32768", "arch-cortex-m", "executor-thread", "defmt", "integrated-timers"], optional = true }
+embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-net = { version = "0.4.0", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet"] }
+embassy-usb = { version = "0.1.0", features = ["defmt"] }
+embassy-embedded-hal = { version = "0.1.0", features = ["time"] }
+embedded-io-async = { version = "0.6.1" }
+embassy-futures = "^0.1.1"
+
+defmt = { version = "^0.3", optional = true }
+defmt-rtt = { version = "0.4", optional = true }
+
+cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"], optional = true }
+cortex-m-rt = "0.7.3"
+cortex-m-alloc = { version = "0.5.1", package = "embedded-alloc" }
+embedded-hal = "0.2.6"
+embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
+panic-probe = { version = "0.3.1", features = ["print-defmt"] }
+futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
+critical-section = "1.1"
+stm32-fmc = "0.3.0"
+heapless = "^0.8"
+chrono = { version = "^0.4", default-features = false, features = ["alloc"] }
+nb = "1.1.0"
+assign-resources = "0.4.1"
+postcard = { version = "1.0.8", default-features = false, features = ["heapless-cas", "alloc", "use-defmt"] }
+shared-bus = { version = "0.3.1", features = ["cortex-m"] }
+static_cell = { version = "2" }
+
+rv8803 = { git = "https://github.com/bsodmike/rv8803-rs" }
+# rv8803 = { path = "/Users/mdesilva/fetch/code/rust-esp32-xtensa/rv8803-rs" }
+
+# Optional
+embedded-storage = { version = "0.3.1", optional = true }
+mipidsi = { version = "0.7.1", optional = true }
+profont = { version = "0.5", optional = true }
+embedded-graphics = "0.7"
+display-interface = "0.4"
+display-interface-spi = "0.4"
+gfx-xtra = "0.1"
+# heapless = { version = "0.8", default-features = false }
+# static_cell = "2"
+# rand_core = "0.6.3"
+# sha2 = { version = "0.10.8", default-features = false }
+fixed = "1.27.0"
+
+[features]
+default = ["embedded_essential", "board_portenta_h7", "display-spi"]
+embedded_essential = ["cortex-m", "embassy-stm32", "embassy-executor", "dep:defmt", "defmt-rtt"]
+stm32h747_400 = []
+stm32h747_480 = []
+stm32h747_slow = []
+board_portenta_h7 = ["stm32h747_480"]
+#board_giga_r1_wifi = ["stm32h747_480"]
+embedded_storage = ["dep:embedded-storage"]
+mipidsi = ["dep:mipidsi"]
+display-spi = ["profont", "ili9342"]
+ili9342 = ["profont", "mipidsi"]
+testing = []
+
+[build-dependencies]
+chrono = "0.4"
+rustc_version = "0.4.0"

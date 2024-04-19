@@ -1,0 +1,34 @@
+name: Rust
+
+on: [push, pull_request]
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build
+    - name: Check formatting
+      run: cargo fmt -- --check
+
+  build-debug:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build --verbose
+
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build --verbose --release --all-features
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Tests
+      run: ./test_linux.sh

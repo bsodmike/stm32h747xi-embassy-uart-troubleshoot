@@ -1,0 +1,13 @@
+{
+    "rust-analyzer.cargo.target": "thumbv7em-none-eabihf",
+    "rust-analyzer.cargo.unsetTest": ["stm32-rtos", "rtos"],
+    // "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.check.allTargets": false,
+    "rust-analyzer.check.extraArgs": [
+      "--target",
+      "thumbv7em-none-eabihf"
+    ],
+    "rust-analyzer.linkedProjects": [
+      "./rtos/Cargo.toml",
+    ],
+}
