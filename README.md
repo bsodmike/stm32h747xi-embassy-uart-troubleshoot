@@ -1,4 +1,4 @@
-# stm32h747xi-uart-troubleshoot
+# stm32h747xi-embassy-uart-troubleshoot
 
 # Troubleshoot UART issues
 
