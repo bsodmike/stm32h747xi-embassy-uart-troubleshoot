@@ -12,7 +12,7 @@ use embassy_time::{Delay, Timer};
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
-#[cfg(not(test))]
+#[cfg(feature = "use_alloc")]
 mod mem;
 
 assign_resources! {
@@ -73,156 +73,36 @@ bind_interrupts!(struct USART1Irqs {
     UART8 => usart::InterruptHandler<peripherals::UART8>;
 });
 
-macro_rules! spawn_tasks (
-    ([$spawner:ident]; $($task:ident),+ $(,)*) => {
-        $(
-            unwrap!($spawner.spawn($task()));
-        )+
-    }
-);
-
-macro_rules! spawn_tasks_with_arg (
-    ([$spawner:ident]; $($task:ident => ($arg1:expr)),+ $(,)*) => {
-        $(
-            unwrap!($spawner.spawn($task($arg1)));
-        )+
-    }
-);
-
-macro_rules! spawn_tasks_with_args (
-    ([$spawner:ident]; $($task:ident => ($arg1:expr, $arg2:expr)),+ $(,)*) => {
-        $(
-            unwrap!($spawner.spawn($task($arg1, $arg2)));
-        )+
-    }
-);
-
 pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
     info!("Initialising power stage...");
 
-    let mut config = embassy_stm32::Config::default();
-    {
-        use embassy_stm32::rcc::*;
-        config.rcc.supply_config = SupplyConfig::LDO;
-        config.rcc.hsi = Some(HSIPrescaler::DIV1); // // 64MHz
-        config.rcc.csi = true;
-        config.rcc.hsi48 = Some(Hsi48Config {
-            sync_from_usb: true,
-        }); // needed for USB
-
-        #[cfg(feature = "stm32h747_400")]
-        {
-            config.rcc.pll1 = Some(Pll {
-                source: PllSource::HSI,
-                prediv: PllPreDiv::DIV4,
-                mul: PllMul::MUL50,
-                divp: Some(PllDiv::DIV2), // ((64/4)*50)/2 = 400MHz
-                divq: Some(PllDiv::DIV8), // ((64/4)*50)/8 = 100MHz / SPI1 cksel defaults to pll1_q
-                divr: None,
-            });
-            config.rcc.pll2 = Some(Pll {
-                source: PllSource::HSI,
-                prediv: PllPreDiv::DIV8,
-                mul: PllMul::MUL50,
-                divp: Some(PllDiv::DIV4), // ((64/8)*50)/4 = 100MHz
-                divq: None,
-                divr: None,
-            });
-        }
-        #[cfg(feature = "stm32h747_480")]
-        {
-            config.rcc.pll1 = Some(Pll {
-                source: PllSource::HSI,
-                prediv: PllPreDiv::DIV8,
-                mul: PllMul::MUL120,
-                divp: Some(PllDiv::DIV2), // ((64/8)*120)/2 = 480MHz
-                divq: Some(PllDiv::DIV8), // ((64/8)*120)/8 = 120MHz / SPI1 cksel defaults to pll1_q
-                divr: None,
-            });
-            config.rcc.pll2 = Some(Pll {
-                source: PllSource::HSI,
-                prediv: PllPreDiv::DIV8,
-                mul: PllMul::MUL50,
-                divp: Some(PllDiv::DIV4), // ((64/8)*50)/4 = 100MHz
-                divq: None,
-                divr: None,
-            });
-        }
-        #[cfg(feature = "stm32h747_slow")]
-        {
-            config.rcc.pll1 = Some(Pll {
-                source: PllSource::HSI,
-                prediv: PllPreDiv::DIV8,
-                mul: PllMul::MUL120,
-                divp: Some(PllDiv::DIV50), // ((64/8)*120)/50 = 19.2MHz
-                divq: Some(PllDiv::DIV80), // ((64/8)*120)/8 = 12MHz / SPI1 cksel defaults to pll1_q
-                divr: None,
-            });
-            config.rcc.pll2 = Some(Pll {
-                source: PllSource::HSI,
-                prediv: PllPreDiv::DIV8,
-                mul: PllMul::MUL50,
-                divp: Some(PllDiv::DIV4), // ((64/8)*50)/4 = 100MHz
-                divq: None,
-                divr: None,
-            });
-        }
-        config.rcc.sys = Sysclk::PLL1_P; // 400 Mhz
-        config.rcc.ahb_pre = AHBPrescaler::DIV2; // 200 Mhz
-        config.rcc.apb1_pre = APBPrescaler::DIV2; // 100 Mhz
-        config.rcc.apb2_pre = APBPrescaler::DIV2; // 100 Mhz
-        config.rcc.apb3_pre = APBPrescaler::DIV2; // 100 Mhz
-        config.rcc.apb4_pre = APBPrescaler::DIV2; // 100 Mhz
-        config.rcc.voltage_scale = VoltageScale::Scale0;
-
-        let mut mux = embassy_stm32::rcc::mux::ClockMux::default();
-        mux.adcsel = embassy_stm32::rcc::mux::Adcsel::PLL2_P;
-        config.rcc.mux = mux;
-
-        // RTC
-        config.rcc.ls = LsConfig::default_lse();
-
-        trace!(
-            "rcc.voltage_scale = Voltage::Scale{=i32}",
-            config.rcc.voltage_scale as i32
-        );
-    }
-
+    let config = embassy_stm32::Config::default();
     let p: embassy_stm32::Peripherals = embassy_stm32::init(config);
     let core_peri = defmt::unwrap!(cortex_m::Peripherals::take());
 
     (p, core_peri)
 }
 
-#[embassy_executor::main]
-async fn main(spawner: Spawner) {
-    let (p, mut core_peri) = init();
+static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+
+#[entry]
+fn main() -> ! {
+    info!("main()");
+    let (p, _core_peri) = init();
     let r = split_resources!(p);
-    // FMC
-    mem::init_sdram(r.fmc, &mut core_peri);
 
-    info!("Bootup completed...");
+    let executor = EXECUTOR.init(Executor::new());
 
-    // Spawn Tasks
-    #[cfg(feature = "board_portenta_h7")]
-    {
-        // spawn_tasks!(
-        //     [spawner];
-        //     heatbeat_task,
-        // );
-
-        spawn_tasks_with_arg!(
-            [spawner];
-            wifi_task => (r.usart1)
-        );
-    }
+    executor.run(|spawner| {
+        unwrap!(spawner.spawn(usart_task(r.usart1)));
+    })
 }
 
 const BUF_SIZE: usize = 2048;
 
 #[embassy_executor::task]
-pub async fn wifi_task(r: USART1Resource) {
-    info!("Running task: wifi_task");
+pub async fn usart_task(r: USART1Resource) {
+    info!("Running task: usart_task");
 
     let mut config = embassy_stm32::usart::Config::default();
     config.baudrate = 9600;
