@@ -16,48 +16,6 @@ use {defmt_rtt as _, panic_probe as _};
 mod mem;
 
 assign_resources! {
-    // Refer to resources/Arduino_GIGA_R1_pins.xlsx for FMC pin config.
-    fmc: FMCResources {
-        fmc: FMC,
-        a0: PF0,        // A0
-        a1: PF1,
-        a2: PF2,
-        a3: PF3,
-        a4: PF4,
-        a5: PF5,
-        a6: PF12,
-        a7: PF13,
-        a8: PF14,
-        a9: PF15,       // A9
-        a10: PG0,
-        a11: PG1,       // A11
-        ba0: PG4,       // BA0
-        ba1: PG5,       // BA1
-        d0: PD14,       // D0
-        d1: PD15,       // D1
-        d2: PD0,        // D2
-        d3: PD1,        // D3
-        d4: PE7,
-        d5: PE8,
-        d6: PE9,
-        d7: PE10,
-        d8: PE11,
-        d9: PE12,
-        d10: PE13,
-        d11: PE14,
-        d12: PE15,
-        d13: PD8,
-        d14: PD9,
-        d15: PD10,      // D15
-        nbl0: PE0,      // NBL0
-        nbl1: PE1,      // NBL1
-        sdcke0: PH2,    // SDCKE0
-        sdclk: PG8,     // SDCLK
-        sdncas: PG15,   // SDNCAS
-        sdne0: PH3,     // SDNE0
-        sdnras: PF11,   // SDNRAS
-        sdnwe: PH5,     // SDNWE
-    },
     usart1: USART1Resource {
         peri: UART8,
         tx: PJ8,        // UART8 tx
