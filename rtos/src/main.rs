@@ -105,7 +105,7 @@ pub async fn usart_task(r: USART1Resource) {
     info!("Running task: usart_task");
 
     let mut config = embassy_stm32::usart::Config::default();
-    config.baudrate = 9600;
+    config.baudrate = 115200;
     let mut usart = defmt::unwrap!(embassy_stm32::usart::Uart::new(
         r.peri, r.rx, r.tx, USART1Irqs, NoDma, NoDma, config
     ));
