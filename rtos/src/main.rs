@@ -17,9 +17,9 @@ mod mem;
 
 assign_resources! {
     usart1: USART1Resource {
-        peri: UART8,
-        tx: PJ8,        // UART8 tx
-        rx: PJ9,        // UART8 rx
+        peri: USART6,
+        tx: PG14,        // USART2_RX
+        rx: PG9,        // USART2_TX
         tx_dma: DMA2_CH0,
         rx_dma: DMA2_CH1,
         rtc_power_key: PG10,
