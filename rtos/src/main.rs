@@ -2,6 +2,8 @@
 #![no_main]
 
 use crate::board::config_portenta_giga_r1_wifi_leds;
+use alloc::boxed::Box;
+use alloc::string::String;
 use assign_resources::assign_resources;
 use cortex_m_rt::entry;
 use defmt::*;
@@ -11,6 +13,7 @@ use embassy_stm32::usart::{self, Config, Uart};
 use embassy_stm32::{bind_interrupts, peripherals};
 use embassy_stm32::{gpio::Output, wdg};
 use embassy_time::{Delay, Timer};
+use once_cell::sync::Lazy;
 use static_cell::StaticCell;
 
 use {defmt_rtt as _, panic_probe as _};
@@ -18,6 +21,8 @@ use {defmt_rtt as _, panic_probe as _};
 use crate::board::LedState;
 use crate::utils::interrupt_free;
 use core::cell::RefCell;
+
+extern crate alloc;
 
 #[cfg(feature = "use_alloc")]
 mod mem;
@@ -57,6 +62,48 @@ set_led!(
 );
 
 assign_resources! {
+    // Refer to resources/Arduino_GIGA_R1_pins.xlsx for FMC pin config.
+    fmc: FMCResources {
+        fmc: FMC,
+        a0: PF0,        // A0
+        a1: PF1,
+        a2: PF2,
+        a3: PF3,
+        a4: PF4,
+        a5: PF5,
+        a6: PF12,
+        a7: PF13,
+        a8: PF14,
+        a9: PF15,       // A9
+        a10: PG0,
+        a11: PG1,       // A11
+        ba0: PG4,       // BA0
+        ba1: PG5,       // BA1
+        d0: PD14,       // D0
+        d1: PD15,       // D1
+        d2: PD0,        // D2
+        d3: PD1,        // D3
+        d4: PE7,
+        d5: PE8,
+        d6: PE9,
+        d7: PE10,
+        d8: PE11,
+        d9: PE12,
+        d10: PE13,
+        d11: PE14,
+        d12: PE15,
+        d13: PD8,
+        d14: PD9,
+        d15: PD10,      // D15
+        nbl0: PE0,      // NBL0
+        nbl1: PE1,      // NBL1
+        sdcke0: PH2,    // SDCKE0
+        sdclk: PG8,     // SDCLK
+        sdncas: PG15,   // SDNCAS
+        sdne0: PH3,     // SDNE0
+        sdnras: PF11,   // SDNRAS
+        sdnwe: PH5,     // SDNWE
+    },
     // usart1: USART1Resource {
     //     peri: UART8,
     //     tx: PJ8,            // UART3 tx
@@ -240,12 +287,20 @@ pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
 }
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+const BUF_SIZE: usize = 2048;
+pub static MESSAGE: critical_section::Mutex<RefCell<Option<String>>> =
+    critical_section::Mutex::new(RefCell::new(None));
+
+pub static TEMP_BUF: Lazy<critical_section::Mutex<Box<[u8; 8]>>> =
+    Lazy::new(|| critical_section::Mutex::new(Box::new([0u8; 8])));
 
 #[entry]
 fn main() -> ! {
     info!("main()");
-    let (p, _core_peri) = init();
+    let (p, mut core_peri) = init();
     let r = split_resources!(p);
+    // FMC
+    mem::init_sdram(r.fmc, &mut core_peri);
 
     // Configure LEDs
     #[cfg(feature = "board_giga_r1_wifi")]
@@ -255,13 +310,21 @@ fn main() -> ! {
 
     let executor = EXECUTOR.init(Executor::new());
 
+    interrupt_free(|cs| {
+        let buf = [0u8; 8];
+        let message = String::default();
+
+        MESSAGE.borrow(cs).replace(Some(message));
+
+        let mut temp_buf = **TEMP_BUF.borrow(cs);
+        temp_buf = buf;
+    });
+
     executor.run(|spawner| {
         unwrap!(spawner.spawn(heatbeat_task()));
         unwrap!(spawner.spawn(usart_task(r.usart1)));
     })
 }
-
-const BUF_SIZE: usize = 2048;
 
 #[embassy_executor::task]
 pub async fn usart_task(r: USART1Resource) {
@@ -273,22 +336,84 @@ pub async fn usart_task(r: USART1Resource) {
         r.peri, r.rx, r.tx, config
     ));
 
-    for i in 0..2 {
-        unwrap!(usart.blocking_write(b"Hello from Rust\r\n"));
-        info!("[{}]: wrote Hello, starting echo", &i);
+    // write once
+    unwrap!(usart.blocking_write(b"Hello from Rust!\r\n"));
+    unwrap!(usart.blocking_flush());
+    debug!("usart_task: Completed blocking write");
 
-        unwrap!(usart.blocking_flush());
-    }
+    // let mut message: heapless::Vec<&str, 1024> = heapless::Vec::new();
 
-    let mut buf = [0u8; 1];
     loop {
-        if let Err(e) = usart.blocking_read(&mut buf) {
-            error!("usart read error: {}", e);
+        // let message = &mut message;
+        let mut received_message = false;
+
+        interrupt_free(|cs| {
+            let mut buf: [u8; 8] = **TEMP_BUF.borrow(cs);
+            if let Err(e) = usart.blocking_read(&mut buf[..]) {
+                error!("usart read error: {}", e);
+            }
+        });
+
+        info!("blocking read completed");
+        {
+            interrupt_free(|cs| {
+                let mut buf: [u8; 8] = **TEMP_BUF.borrow(cs);
+                let mut new_buf: alloc::vec::Vec<u8> = buf.iter().map(|&el| el).collect();
+
+                let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
+                let x = String::new();
+                let rx_char = String::from_utf8(new_buf).expect("Create string");
+
+                if let Some(message) = message_opt {
+                    info!("rx_char: {=str}", &rx_char);
+                    debug!("rx_char: {}", &rx_char.len());
+                    match &rx_char[6..] {
+                        "\r\n" => {
+                            trace!("Found message termination");
+
+                            let rx_bytes = rx_char.as_bytes();
+
+                            debug!("This: {}", rx_bytes[5..6][0]);
+
+                            let mut chars = rx_char[5..6].chars();
+                            let _ = message.push(chars.next().expect("Take char"));
+                            debug!("message size: {}", message.len());
+
+                            debug!("5..6: {}", &rx_char[5..6]);
+                            debug!("equal? {}", rx_char[5..6] == *"e");
+                            if rx_char[5..6] == *"e" {
+                                debug!("set received_message = true");
+                                received_message = true;
+                            }
+                        }
+                        _ => error!("Unable to locate end of message!"),
+                    }
+                };
+
+                // else if let Err(e) = core::str::from_utf8(&mut buf) {
+                //     error!("from_utf8: UTF8Error");
+                // }
+            });
         }
 
-        if let Err(_e) = usart.blocking_write(&buf) {
-            //
+        interrupt_free(|cs| {
+            let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
+
+            if let Some(message) = message_opt {
+                info!("Received message: {}", &message.as_bytes());
+            }
+        });
+
+        if received_message {
+            // if let Ok(message_text) = core::str::from_utf8(&message) {
+            //     info!("Received message: {}", &message_text);
+            // } else if let Err(e) = core::str::from_utf8(&message) {
+            //     error!("received_message: from_utf8: UTF8Error");
+            // }
+
+            received_message = false;
         }
+        // FIXME need to figure out when to clear the array.
     }
 }
 

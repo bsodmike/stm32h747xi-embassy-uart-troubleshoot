@@ -34,6 +34,7 @@ assign-resources = "0.4.1"
 postcard = { version = "1.0.8", default-features = false, features = ["heapless-cas", "alloc", "use-defmt"], optional = true }
 shared-bus = { version = "0.3.1", features = ["cortex-m"] }
 static_cell = { version = "2" }
+once_cell = { version = "1.19.0", default-features = false, features = ["alloc", "critical-section"] }
 
 rv8803 = { git = "https://github.com/bsodmike/rv8803-rs" }
 # rv8803 = { path = "/Users/mdesilva/fetch/code/rust-esp32-xtensa/rv8803-rs" }
@@ -53,7 +54,7 @@ gfx-xtra = "0.1"
 fixed = "1.27.0"
 
 [features]
-default = ["embedded_essential", "board_giga_r1_wifi", "display-spi"]
+default = ["embedded_essential", "board_giga_r1_wifi", "display-spi", "use_alloc"]
 embedded_essential = ["cortex-m", "embassy-stm32", "embassy-executor", "dep:defmt", "defmt-rtt"]
 stm32h747_400 = []
 stm32h747_480 = []
