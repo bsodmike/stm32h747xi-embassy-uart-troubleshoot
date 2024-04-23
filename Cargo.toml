@@ -6,14 +6,23 @@ members = [
 ]
 
 [patch.crates-io]
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
-embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-sync = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-futures = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+# embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "da86c08" }
+embassy-time = { path = "./vendor/embassy/embassy-time" }
+embassy-executor = { path = "./vendor/embassy/embassy-executor" }
+embassy-stm32 = { path = "./vendor/embassy/embassy-stm32" }
+embassy-sync = { path = "./vendor/embassy/embassy-sync" }
+embassy-futures = { path = "./vendor/embassy/embassy-futures" }
+embassy-embedded-hal = { path = "./vendor/embassy/embassy-embedded-hal" }
+embassy-net = { path = "./vendor/embassy/embassy-net" }
+embassy-usb = { path = "./vendor/embassy/embassy-usb" }
+
 
 [profile.dev]
 codegen-units = 1 # better optimizations
