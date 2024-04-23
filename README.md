@@ -17,6 +17,10 @@ This code-base will be used to verify the following peripherals, before I import
 | I2C Blocking                     | [ ]    |       |
 | I2C Async                        | [ ]    |       |
 
+To get a base line, I used the [STM32CubeIDE to generate a basic project](https://gist.github.com/bsodmike/837595acc3a7c7b3e166a3612a4a311d) for the `stm32h747xi` mcu and a matching UART peripheral for the Portenta H7.  This baseline shows the ideal `rcc` config for the power stage.
+
+Tweaks to this power stage config will be made continuously, so check back as needed.
+
 
 # Troubleshoot UART issues
 
