@@ -327,7 +327,6 @@ fn main() -> ! {
     })
 }
 
-// #[allow(unused_assignments)]
 #[embassy_executor::task]
 pub async fn usart_task(r: USART1Resource) {
     info!("Running task: usart_task");
@@ -343,10 +342,7 @@ pub async fn usart_task(r: USART1Resource) {
     unwrap!(usart.blocking_flush());
     debug!("usart_task: Completed blocking write");
 
-    // let mut message: heapless::Vec<&str, 1024> = heapless::Vec::new();
-
     loop {
-        // let message = &mut message;
         let mut received_message = false;
 
         interrupt_free(|cs| {
@@ -421,7 +417,6 @@ pub async fn usart_task(r: USART1Resource) {
 
             received_message = false;
         }
-        // FIXME need to figure out when to clear the array.
     }
 }
 
