@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+use crate::board::config_portenta_giga_r1_wifi_leds;
+use alloc::boxed::Box;
+use alloc::string::String;
 use assign_resources::assign_resources;
 use cortex_m_rt::entry;
 use defmt::*;
@@ -8,15 +11,59 @@ use embassy_executor::{Executor, Spawner};
 use embassy_stm32::dma::NoDma;
 use embassy_stm32::usart::{self, Config, Uart};
 use embassy_stm32::{bind_interrupts, peripherals};
+use embassy_stm32::{gpio::Output, wdg};
 use embassy_time::{Delay, Timer};
+use once_cell::sync::Lazy;
 use static_cell::StaticCell;
+
 use {defmt_rtt as _, panic_probe as _};
 
-#[cfg(not(test))]
+use crate::board::LedState;
+use crate::utils::interrupt_free;
+use core::cell::RefCell;
+
+extern crate alloc;
+
+#[cfg(feature = "use_alloc")]
 mod mem;
+
+pub static LED_RED: critical_section::Mutex<RefCell<Option<Output<'_>>>> =
+    critical_section::Mutex::new(RefCell::new(None));
+pub static LED_GREEN: critical_section::Mutex<RefCell<Option<Output<'_>>>> =
+    critical_section::Mutex::new(RefCell::new(None));
+pub static LED_BLUE: critical_section::Mutex<RefCell<Option<Output<'_>>>> =
+    critical_section::Mutex::new(RefCell::new(None));
+
+macro_rules! set_led (
+        ($($fn_name:ident => ($mutex:expr)),+ $(,)*) => {
+            $(
+                pub fn $fn_name(state: LedState) {
+                    match state {
+                        LedState::On => interrupt_free(|cs| {
+                            if let Some(pin) = &mut *$mutex.borrow_ref_mut(cs) {
+                                pin.set_low()
+                            };
+                        }),
+                        LedState::Off => interrupt_free(|cs| {
+                            if let Some(pin) = &mut *$mutex.borrow_ref_mut(cs) {
+                                pin.set_high()
+                            };
+                        }),
+                    };
+                }
+            )+
+        }
+    );
+
+set_led!(
+    set_blue_led => (LED_BLUE),
+    set_green_led => (LED_GREEN),
+    set_red_led => (LED_RED),
+);
 
 assign_resources! {
     // Refer to resources/Arduino_GIGA_R1_pins.xlsx for FMC pin config.
+    // This also works on the Portenta H7
     fmc: FMCResources {
         fmc: FMC,
         a0: PF0,        // A0
@@ -58,45 +105,94 @@ assign_resources! {
         sdnras: PF11,   // SDNRAS
         sdnwe: PH5,     // SDNWE
     },
+
+    // Portenta H7
+    // usart1: USART1Resource {
+    //     peri: UART8,
+    //     tx: PJ8,            // UART3 tx
+    //     rx: PJ9,            // UART3 rx
+    //     tx_dma: DMA2_CH0,
+    //     rx_dma: DMA2_CH1,
+    //     rtc_power_key: PG10,
+    //     wifi_reset: PH15,
+    // },
+
+    // GIGA R1 WiFI
     usart1: USART1Resource {
-        peri: UART8,
-        tx: PJ8,        // UART8 tx
-        rx: PJ9,        // UART8 rx
+        peri: USART1,
+        tx: PA9,            // USART1 tx
+        rx: PB7,            // USART1 rx
         tx_dma: DMA2_CH0,
         rx_dma: DMA2_CH1,
         rtc_power_key: PG10,
-        wifi_reset: PH15,
+    },
+    giga_r1_wifi_board_leds: GigaR1WifiBoardLeds {
+        red: PI12,
+        green: PJ13,
+        blue: PE3,
     },
 }
 
-bind_interrupts!(struct USART1Irqs {
-    UART8 => usart::InterruptHandler<peripherals::UART8>;
-});
+// NOTE: Only needed for testing with DMA
+// bind_interrupts!(struct USART1Irqs {
+//     UART8 => usart::InterruptHandler<peripherals::UART8>;
+// });
 
-macro_rules! spawn_tasks (
-    ([$spawner:ident]; $($task:ident),+ $(,)*) => {
-        $(
-            unwrap!($spawner.spawn($task()));
-        )+
-    }
-);
+// FIXME needs testing
+// pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
+//     info!("Initialising power stage...");
 
-macro_rules! spawn_tasks_with_arg (
-    ([$spawner:ident]; $($task:ident => ($arg1:expr)),+ $(,)*) => {
-        $(
-            unwrap!($spawner.spawn($task($arg1)));
-        )+
-    }
-);
+//     let mut config = embassy_stm32::Config::default();
+//     {
+//         use embassy_stm32::rcc::*;
+//         config.rcc.supply_config = SupplyConfig::LDO;
+//         config.rcc.hsi = Some(HSIPrescaler::DIV1); // // 64MHz
+//         config.rcc.csi = true;
+//         config.rcc.hsi48 = Some(Hsi48Config {
+//             sync_from_usb: true,
+//         }); // needed for USB
 
-macro_rules! spawn_tasks_with_args (
-    ([$spawner:ident]; $($task:ident => ($arg1:expr, $arg2:expr)),+ $(,)*) => {
-        $(
-            unwrap!($spawner.spawn($task($arg1, $arg2)));
-        )+
-    }
-);
+//         #[cfg(feature = "stm32h747_480")]
+//         {
+//             config.rcc.pll1 = Some(Pll {
+//                 source: PllSource::HSI,
+//                 prediv: PllPreDiv::DIV16,
+//                 mul: PllMul::MUL240,      // Plln
+//                 divp: Some(PllDiv::DIV2), // ((64/8)*120)/2 = 480MHz
+//                 divq: Some(PllDiv::DIV2), // ((64/8)*120)/8 = 120MHz / SPI1 cksel defaults to pll1_q
+//                 divr: Some(PllDiv::DIV2),
+//             });
+//             // config.rcc.pll2 = Some(Pll {
+//             //     source: PllSource::HSI,
+//             //     prediv: PllPreDiv::DIV8,
+//             //     mul: PllMul::MUL50,
+//             //     divp: Some(PllDiv::DIV4), // ((64/8)*50)/4 = 100MHz
+//             //     divq: None,
+//             //     divr: None,
+//             // });
+//         }
 
+//         config.rcc.sys = Sysclk::PLL1_P; // 400 Mhz
+//         config.rcc.ahb_pre = AHBPrescaler::DIV2; // 200 Mhz
+//         config.rcc.apb1_pre = APBPrescaler::DIV2; // 100 Mhz
+//         config.rcc.apb2_pre = APBPrescaler::DIV2; // 100 Mhz
+//         config.rcc.apb3_pre = APBPrescaler::DIV2; // 100 Mhz
+//         config.rcc.apb4_pre = APBPrescaler::DIV2; // 100 Mhz
+//         config.rcc.voltage_scale = VoltageScale::Scale0;
+
+//         trace!(
+//             "rcc.voltage_scale = Voltage::Scale{=i32}",
+//             config.rcc.voltage_scale as i32
+//         );
+//     }
+
+//     let p: embassy_stm32::Peripherals = embassy_stm32::init(config);
+//     let core_peri = defmt::unwrap!(cortex_m::Peripherals::take());
+
+//     (p, core_peri)
+// }
+
+// GIGA R1 WIFI
 pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
     info!("Initialising power stage...");
 
@@ -173,7 +269,7 @@ pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
         config.rcc.apb2_pre = APBPrescaler::DIV2; // 100 Mhz
         config.rcc.apb3_pre = APBPrescaler::DIV2; // 100 Mhz
         config.rcc.apb4_pre = APBPrescaler::DIV2; // 100 Mhz
-        config.rcc.voltage_scale = VoltageScale::Scale0;
+        config.rcc.voltage_scale = VoltageScale::Scale1;
 
         let mut mux = embassy_stm32::rcc::mux::ClockMux::default();
         mux.adcsel = embassy_stm32::rcc::mux::Adcsel::PLL2_P;
@@ -194,48 +290,201 @@ pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
     (p, core_peri)
 }
 
-#[embassy_executor::main]
-async fn main(spawner: Spawner) {
+const BUF_SIZE: usize = 2048;
+static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+pub static MESSAGE: critical_section::Mutex<RefCell<Option<String>>> =
+    critical_section::Mutex::new(RefCell::new(None));
+pub static TEMP_BUF: Lazy<critical_section::Mutex<RefCell<Box<[u8; 8]>>>> =
+    Lazy::new(|| critical_section::Mutex::new(RefCell::new(Box::new([0u8; 8]))));
+
+#[entry]
+fn main() -> ! {
+    info!("main()");
     let (p, mut core_peri) = init();
     let r = split_resources!(p);
     // FMC
     mem::init_sdram(r.fmc, &mut core_peri);
 
-    info!("Bootup completed...");
-
-    // Spawn Tasks
-    #[cfg(feature = "board_portenta_h7")]
+    // Configure LEDs
+    #[cfg(feature = "board_giga_r1_wifi")]
     {
-        // spawn_tasks!(
-        //     [spawner];
-        //     heatbeat_task,
-        // );
+        config_portenta_giga_r1_wifi_leds(r.giga_r1_wifi_board_leds);
+    }
 
-        spawn_tasks_with_arg!(
-            [spawner];
-            wifi_task => (r.usart1)
-        );
+    let executor = EXECUTOR.init(Executor::new());
+
+    interrupt_free(|cs| {
+        let buf = [0u8; 8];
+        let message = String::default();
+
+        MESSAGE.borrow(cs).replace(Some(message));
+        let _ = *TEMP_BUF.borrow(cs).replace(Box::new(buf));
+    });
+
+    executor.run(|spawner| {
+        unwrap!(spawner.spawn(heatbeat_task()));
+        unwrap!(spawner.spawn(usart_task(r.usart1)));
+    })
+}
+
+// #[allow(unused_assignments)]
+#[embassy_executor::task]
+pub async fn usart_task(r: USART1Resource) {
+    info!("Running task: usart_task");
+
+    let mut config = embassy_stm32::usart::Config::default();
+    config.baudrate = 115200;
+    let mut usart = defmt::unwrap!(embassy_stm32::usart::Uart::new_blocking(
+        r.peri, r.rx, r.tx, config
+    ));
+
+    // write once
+    unwrap!(usart.blocking_write(b"Hello from Rust!\0\r\n"));
+    unwrap!(usart.blocking_flush());
+    debug!("usart_task: Completed blocking write");
+
+    // let mut message: heapless::Vec<&str, 1024> = heapless::Vec::new();
+
+    loop {
+        // let message = &mut message;
+        let mut received_message = false;
+
+        interrupt_free(|cs| {
+            let buf_refmut = TEMP_BUF.borrow(cs);
+            let mut new_buf: [u8; 8] = [0u8; 8];
+            if let Err(e) = usart.blocking_read(&mut new_buf[..]) {
+                error!("usart read error: {}", e);
+            }
+
+            buf_refmut.replace(Box::new(new_buf));
+        });
+
+        info!("blocking read completed");
+        {
+            interrupt_free(|cs| {
+                let buf = **&mut *TEMP_BUF.borrow_ref_mut(cs);
+                let new_buf: alloc::vec::Vec<u8> = buf.iter().map(|&el| el).collect();
+                info!("buf: {}", &buf);
+                info!("new_buf len: {}", &new_buf.len());
+
+                let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
+                let rx_char = String::from_utf8(new_buf).expect("Create string");
+
+                if let Some(message) = message_opt {
+                    info!("rx_char: {=str}", &rx_char);
+                    debug!("rx_char len: {}", &rx_char.len());
+                    match &rx_char[6..] {
+                        "\r\n" => {
+                            trace!("Found message termination");
+
+                            let rx_bytes = rx_char.as_bytes();
+
+                            debug!("This: {}", rx_bytes[5..6][0]);
+
+                            let mut chars = rx_char[5..6].chars();
+                            let _ = message.push(chars.next().expect("Take char"));
+                            debug!("message size: {}", message.len());
+
+                            debug!("5..6: {}", &rx_char[5..6]);
+                            warn!("equal? {}", rx_char[5..6] == *"\0");
+                            if rx_char[5..6] == *"\0" {
+                                warn!("set received_message = true");
+                                received_message = true;
+                            }
+                        }
+                        _ => error!("Unable to locate end of message!"),
+                    }
+                };
+            });
+        }
+
+        interrupt_free(|cs| {
+            let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
+
+            if let Some(message) = message_opt {
+                trace!("Received message (Bytes): {}", &message.as_bytes());
+            }
+        });
+
+        if received_message {
+            interrupt_free(|cs| {
+                {
+                    let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
+                    if let Some(message) = message_opt {
+                        warn!("Received message: {}", &message.as_str());
+                    }
+                }
+
+                MESSAGE.borrow(cs).replace(Some(String::default()));
+                warn!("Cleared Message buffer");
+            });
+
+            received_message = false;
+        }
+        // FIXME need to figure out when to clear the array.
     }
 }
 
-const BUF_SIZE: usize = 2048;
-
 #[embassy_executor::task]
-pub async fn wifi_task(r: USART1Resource) {
-    info!("Running task: wifi_task");
+pub async fn heatbeat_task() {
+    let mut counter: u32 = 0;
+    info!("Running task: heatbeat_task");
 
-    let mut config = embassy_stm32::usart::Config::default();
-    config.baudrate = 9600;
-    let mut usart = defmt::unwrap!(embassy_stm32::usart::Uart::new(
-        r.peri, r.rx, r.tx, USART1Irqs, NoDma, NoDma, config
-    ));
-
-    unwrap!(usart.blocking_write(b"Hello Embassy World!\r\n"));
-    info!("wrote Hello, starting echo");
-
-    let mut buf = [0u8; 1];
     loop {
-        unwrap!(usart.blocking_read(&mut buf));
-        unwrap!(usart.blocking_write(&buf));
+        // trace!("BLUE led off");
+        set_blue_led(LedState::Off);
+        Timer::after_millis(50).await;
+
+        // info!("BLUE led on");
+        set_blue_led(LedState::On);
+        Timer::after_millis(50).await;
+
+        // HEARTBEAT_SIGNAL.signal(counter);
+        counter = counter.wrapping_add(1);
+    }
+}
+
+#[macro_use]
+mod board {
+    use crate::{utils::interrupt_free, GigaR1WifiBoardLeds, LED_BLUE, LED_GREEN, LED_RED};
+    use embassy_stm32::gpio::{Level, Output, Pin, Speed};
+
+    pub enum LedState {
+        On,
+        Off,
+    }
+
+    #[allow(dead_code)]
+    pub fn config_portenta_giga_r1_wifi_leds(leds: GigaR1WifiBoardLeds) {
+        {
+            interrupt_free(|cs| {
+                let pin = leds.red.degrade();
+                let mut led_red = Output::new(pin, Level::High, Speed::Low);
+                let pin = leds.green.degrade();
+                let mut led_green = Output::new(pin, Level::High, Speed::Low);
+                let pin = leds.blue.degrade();
+                let mut led_blue = Output::new(pin, Level::High, Speed::Low);
+
+                led_red.set_high();
+                led_green.set_high();
+                led_blue.set_high();
+
+                LED_RED.borrow(cs).replace(Some(led_red));
+                LED_GREEN.borrow(cs).replace(Some(led_green));
+                LED_BLUE.borrow(cs).replace(Some(led_blue));
+            });
+        }
+    }
+}
+
+mod utils {
+    use critical_section::CriticalSection;
+
+    #[inline(always)]
+    pub fn interrupt_free<F, R>(f: F) -> R
+    where
+        F: FnOnce(CriticalSection) -> R,
+    {
+        critical_section::with(f)
     }
 }

@@ -1,5 +1,27 @@
 # stm32h747xi-embassy-uart-troubleshoot
 
+## Notes
+
+This code base is intentionally rather messy, as this has been extracted from a much larger workspace.  Here, I have favoured less files and placed most if not all the important logic into `main.rs`.
+
+The only module that has been extracted in the FMC setup, as alloc now works on both the Arduino GIGA R1 WiFi and Portenta H7.
+
+## Peripherals
+
+This code-base will be used to verify the following peripherals, before I import them back into my main projects.
+
+| Issue                            | Status | Notes |
+|----------------------------------|--------|-------|
+| UART Blocking read/write         | [ ]    |       |
+| UART Async read/write (with DMA) | [ ]    |       |
+| I2C Blocking                     | [ ]    |       |
+| I2C Async                        | [ ]    |       |
+
+To get a base line, I used the [STM32CubeIDE to generate a basic project](https://gist.github.com/bsodmike/837595acc3a7c7b3e166a3612a4a311d) for the `stm32h747xi` mcu and a matching UART peripheral for the Portenta H7.  This baseline shows the ideal `rcc` config for the power stage.
+
+Tweaks to this power stage config will be made continuously, so check back as needed.
+
+
 # Troubleshoot UART issues
 
 Steps to replicate:

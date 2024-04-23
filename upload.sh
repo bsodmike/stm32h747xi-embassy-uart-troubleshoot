@@ -2,7 +2,7 @@
 
 set -e
 RELEASE=release
-BOARD="portenta_h7"
+BOARD="giga_r1_wifi"
 
 if [ ! -z $1 ]; then
     # Handle bootloader start address for Portenta H7

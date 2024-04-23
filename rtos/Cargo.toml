@@ -20,7 +20,7 @@ defmt-rtt = { version = "0.4", optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"], optional = true }
 cortex-m-rt = "0.7.3"
-cortex-m-alloc = { version = "0.5.1", package = "embedded-alloc" }
+cortex-m-alloc = { version = "0.5.1", package = "embedded-alloc", optional = true }
 embedded-hal = "0.2.6"
 embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
 panic-probe = { version = "0.3.1", features = ["print-defmt"] }
@@ -28,12 +28,13 @@ futures = { version = "0.3.17", default-features = false, features = ["async-awa
 critical-section = "1.1"
 stm32-fmc = "0.3.0"
 heapless = "^0.8"
-chrono = { version = "^0.4", default-features = false, features = ["alloc"] }
+chrono = { version = "^0.4", default-features = false, features = ["alloc"], optional = true }
 nb = "1.1.0"
 assign-resources = "0.4.1"
-postcard = { version = "1.0.8", default-features = false, features = ["heapless-cas", "alloc", "use-defmt"] }
+postcard = { version = "1.0.8", default-features = false, features = ["heapless-cas", "alloc", "use-defmt"], optional = true }
 shared-bus = { version = "0.3.1", features = ["cortex-m"] }
 static_cell = { version = "2" }
+once_cell = { version = "1.19.0", default-features = false, features = ["alloc", "critical-section"] }
 
 rv8803 = { git = "https://github.com/bsodmike/rv8803-rs" }
 # rv8803 = { path = "/Users/mdesilva/fetch/code/rust-esp32-xtensa/rv8803-rs" }
@@ -53,18 +54,19 @@ gfx-xtra = "0.1"
 fixed = "1.27.0"
 
 [features]
-default = ["embedded_essential", "board_portenta_h7", "display-spi"]
+default = ["embedded_essential", "board_giga_r1_wifi", "display-spi", "use_alloc"]
 embedded_essential = ["cortex-m", "embassy-stm32", "embassy-executor", "dep:defmt", "defmt-rtt"]
 stm32h747_400 = []
 stm32h747_480 = []
 stm32h747_slow = []
-board_portenta_h7 = ["stm32h747_480"]
-#board_giga_r1_wifi = ["stm32h747_480"]
+# board_portenta_h7 = ["stm32h747_480"]
+board_giga_r1_wifi = ["stm32h747_400"]
 embedded_storage = ["dep:embedded-storage"]
 mipidsi = ["dep:mipidsi"]
 display-spi = ["profont", "ili9342"]
 ili9342 = ["profont", "mipidsi"]
 testing = []
+use_alloc = ["dep:cortex-m-alloc", "dep:chrono", "dep:postcard"]
 
 [build-dependencies]
 chrono = "0.4"
