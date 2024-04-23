@@ -1222,6 +1222,13 @@ impl<'d, T: BasicInstance, M: Mode> Uart<'d, T, M> {
     pub fn split(self) -> (UartTx<'d, T, M>, UartRx<'d, T, M>) {
         (self.tx, self.rx)
     }
+
+    /// Perform a blocking UART write and block until transmission complete
+    pub fn blocking_write_and_flush(&mut self, buffer: &[u8]) -> Result<(), Error> {
+        self.tx.blocking_write(buffer)?;
+        self.tx.blocking_flush()?;
+        Ok(())
+    }
 }
 
 fn reconfigure<T: BasicInstance>(config: &Config) -> Result<(), ConfigError> {
@@ -1273,11 +1280,11 @@ fn configure(
         Kind::Lpuart => {
             trace!("USART: Kind::Lpuart");
             (256, 0x300, 0x10_0000)
-        },
+        }
         Kind::Uart => {
             trace!("USART: Kind::Uart");
             (1, 0x10, 0x1_0000)
-        },
+        }
     };
 
     fn calculate_brr(baud: u32, pclk: u32, presc: u32, mul: u32) -> u32 {
@@ -1393,15 +1400,15 @@ fn configure(
             Parity::ParityOdd => {
                 trace!("set_ps: vals::Ps::ODD");
                 vals::Ps::ODD
-            },
+            }
             Parity::ParityEven => {
                 trace!("set_ps: vals::Ps::EVEN");
                 vals::Ps::EVEN
-            },
+            }
             _ => {
                 trace!("set_ps: vals::Ps::EVEN");
                 vals::Ps::EVEN
-            },
+            }
         });
         #[cfg(not(usart_v1))]
         w.set_over8(vals::Over8::from_bits(over8 as _));
