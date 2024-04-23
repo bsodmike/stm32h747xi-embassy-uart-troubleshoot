@@ -1270,8 +1270,14 @@ fn configure(
 
     let (mul, brr_min, brr_max) = match kind {
         #[cfg(any(usart_v3, usart_v4))]
-        Kind::Lpuart => (256, 0x300, 0x10_0000),
-        Kind::Uart => (1, 0x10, 0x1_0000),
+        Kind::Lpuart => {
+            trace!("USART: Kind::Lpuart");
+            (256, 0x300, 0x10_0000)
+        },
+        Kind::Uart => {
+            trace!("USART: Kind::Uart");
+            (1, 0x10, 0x1_0000)
+        },
     };
 
     fn calculate_brr(baud: u32, pclk: u32, presc: u32, mul: u32) -> u32 {
@@ -1373,22 +1379,37 @@ fn configure(
         w.set_re(enable_rx);
         // configure word size
         // if using odd or even parity it must be configured to 9bits
-        w.set_m0(if config.parity != Parity::ParityNone {
+        let m0 = if config.parity != Parity::ParityNone {
+            trace!("m0: vals::M0::BIT9");
             vals::M0::BIT9
         } else {
+            trace!("m0: vals::M0::BIT8");
             vals::M0::BIT8
-        });
+        };
+        w.set_m0(m0);
         // configure parity
         w.set_pce(config.parity != Parity::ParityNone);
         w.set_ps(match config.parity {
-            Parity::ParityOdd => vals::Ps::ODD,
-            Parity::ParityEven => vals::Ps::EVEN,
-            _ => vals::Ps::EVEN,
+            Parity::ParityOdd => {
+                trace!("set_ps: vals::Ps::ODD");
+                vals::Ps::ODD
+            },
+            Parity::ParityEven => {
+                trace!("set_ps: vals::Ps::EVEN");
+                vals::Ps::EVEN
+            },
+            _ => {
+                trace!("set_ps: vals::Ps::EVEN");
+                vals::Ps::EVEN
+            },
         });
         #[cfg(not(usart_v1))]
         w.set_over8(vals::Over8::from_bits(over8 as _));
         #[cfg(usart_v4)]
-        w.set_fifoen(true);
+        {
+            trace!("set_fifoen: true (usart_v4)");
+            w.set_fifoen(true);
+        }
     });
 
     Ok(())

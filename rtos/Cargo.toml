@@ -53,13 +53,13 @@ gfx-xtra = "0.1"
 fixed = "1.27.0"
 
 [features]
-default = ["embedded_essential", "board_portenta_h7", "display-spi"]
+default = ["embedded_essential", "board_giga_r1_wifi", "display-spi"]
 embedded_essential = ["cortex-m", "embassy-stm32", "embassy-executor", "dep:defmt", "defmt-rtt"]
 stm32h747_400 = []
 stm32h747_480 = []
 stm32h747_slow = []
-board_portenta_h7 = ["stm32h747_480"]
-#board_giga_r1_wifi = ["stm32h747_480"]
+# board_portenta_h7 = ["stm32h747_480"]
+board_giga_r1_wifi = ["stm32h747_400"]
 embedded_storage = ["dep:embedded-storage"]
 mipidsi = ["dep:mipidsi"]
 display-spi = ["profont", "ili9342"]
