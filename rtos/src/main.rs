@@ -63,6 +63,7 @@ set_led!(
 
 assign_resources! {
     // Refer to resources/Arduino_GIGA_R1_pins.xlsx for FMC pin config.
+    // This also works on the Portenta H7
     fmc: FMCResources {
         fmc: FMC,
         a0: PF0,        // A0
@@ -104,6 +105,8 @@ assign_resources! {
         sdnras: PF11,   // SDNRAS
         sdnwe: PH5,     // SDNWE
     },
+
+    // Portenta H7
     // usart1: USART1Resource {
     //     peri: UART8,
     //     tx: PJ8,            // UART3 tx
@@ -135,6 +138,7 @@ assign_resources! {
 //     UART8 => usart::InterruptHandler<peripherals::UART8>;
 // });
 
+// FIXME needs testing
 // pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
 //     info!("Initialising power stage...");
 
@@ -286,13 +290,12 @@ pub fn init() -> (embassy_stm32::Peripherals, cortex_m::Peripherals) {
     (p, core_peri)
 }
 
-static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 const BUF_SIZE: usize = 2048;
+static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 pub static MESSAGE: critical_section::Mutex<RefCell<Option<String>>> =
     critical_section::Mutex::new(RefCell::new(None));
-
-pub static TEMP_BUF: Lazy<critical_section::Mutex<Box<[u8; 8]>>> =
-    Lazy::new(|| critical_section::Mutex::new(Box::new([0u8; 8])));
+pub static TEMP_BUF: Lazy<critical_section::Mutex<RefCell<Box<[u8; 8]>>>> =
+    Lazy::new(|| critical_section::Mutex::new(RefCell::new(Box::new([0u8; 8]))));
 
 #[entry]
 fn main() -> ! {
@@ -315,9 +318,7 @@ fn main() -> ! {
         let message = String::default();
 
         MESSAGE.borrow(cs).replace(Some(message));
-
-        let mut temp_buf = **TEMP_BUF.borrow(cs);
-        temp_buf = buf;
+        let _ = *TEMP_BUF.borrow(cs).replace(Box::new(buf));
     });
 
     executor.run(|spawner| {
@@ -326,6 +327,7 @@ fn main() -> ! {
     })
 }
 
+// #[allow(unused_assignments)]
 #[embassy_executor::task]
 pub async fn usart_task(r: USART1Resource) {
     info!("Running task: usart_task");
@@ -337,7 +339,7 @@ pub async fn usart_task(r: USART1Resource) {
     ));
 
     // write once
-    unwrap!(usart.blocking_write(b"Hello from Rust!\r\n"));
+    unwrap!(usart.blocking_write(b"Hello from Rust!\0\r\n"));
     unwrap!(usart.blocking_flush());
     debug!("usart_task: Completed blocking write");
 
@@ -348,25 +350,29 @@ pub async fn usart_task(r: USART1Resource) {
         let mut received_message = false;
 
         interrupt_free(|cs| {
-            let mut buf: [u8; 8] = **TEMP_BUF.borrow(cs);
-            if let Err(e) = usart.blocking_read(&mut buf[..]) {
+            let buf_refmut = TEMP_BUF.borrow(cs);
+            let mut new_buf: [u8; 8] = [0u8; 8];
+            if let Err(e) = usart.blocking_read(&mut new_buf[..]) {
                 error!("usart read error: {}", e);
             }
+
+            buf_refmut.replace(Box::new(new_buf));
         });
 
         info!("blocking read completed");
         {
             interrupt_free(|cs| {
-                let mut buf: [u8; 8] = **TEMP_BUF.borrow(cs);
-                let mut new_buf: alloc::vec::Vec<u8> = buf.iter().map(|&el| el).collect();
+                let buf = **&mut *TEMP_BUF.borrow_ref_mut(cs);
+                let new_buf: alloc::vec::Vec<u8> = buf.iter().map(|&el| el).collect();
+                info!("buf: {}", &buf);
+                info!("new_buf len: {}", &new_buf.len());
 
                 let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
-                let x = String::new();
                 let rx_char = String::from_utf8(new_buf).expect("Create string");
 
                 if let Some(message) = message_opt {
                     info!("rx_char: {=str}", &rx_char);
-                    debug!("rx_char: {}", &rx_char.len());
+                    debug!("rx_char len: {}", &rx_char.len());
                     match &rx_char[6..] {
                         "\r\n" => {
                             trace!("Found message termination");
@@ -380,19 +386,15 @@ pub async fn usart_task(r: USART1Resource) {
                             debug!("message size: {}", message.len());
 
                             debug!("5..6: {}", &rx_char[5..6]);
-                            debug!("equal? {}", rx_char[5..6] == *"e");
-                            if rx_char[5..6] == *"e" {
-                                debug!("set received_message = true");
+                            warn!("equal? {}", rx_char[5..6] == *"\0");
+                            if rx_char[5..6] == *"\0" {
+                                warn!("set received_message = true");
                                 received_message = true;
                             }
                         }
                         _ => error!("Unable to locate end of message!"),
                     }
                 };
-
-                // else if let Err(e) = core::str::from_utf8(&mut buf) {
-                //     error!("from_utf8: UTF8Error");
-                // }
             });
         }
 
@@ -400,16 +402,22 @@ pub async fn usart_task(r: USART1Resource) {
             let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
 
             if let Some(message) = message_opt {
-                info!("Received message: {}", &message.as_bytes());
+                trace!("Received message (Bytes): {}", &message.as_bytes());
             }
         });
 
         if received_message {
-            // if let Ok(message_text) = core::str::from_utf8(&message) {
-            //     info!("Received message: {}", &message_text);
-            // } else if let Err(e) = core::str::from_utf8(&message) {
-            //     error!("received_message: from_utf8: UTF8Error");
-            // }
+            interrupt_free(|cs| {
+                {
+                    let message_opt = &mut *MESSAGE.borrow_ref_mut(cs);
+                    if let Some(message) = message_opt {
+                        warn!("Received message: {}", &message.as_str());
+                    }
+                }
+
+                MESSAGE.borrow(cs).replace(Some(String::default()));
+                warn!("Cleared Message buffer");
+            });
 
             received_message = false;
         }
