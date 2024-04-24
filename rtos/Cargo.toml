@@ -35,6 +35,7 @@ postcard = { version = "1.0.8", default-features = false, features = ["heapless-
 shared-bus = { version = "0.3.1", features = ["cortex-m"] }
 static_cell = { version = "2" }
 once_cell = { version = "1.19.0", default-features = false, features = ["alloc", "critical-section"] }
+# safe-regex = { version = "^0.3", default-features = false }
 
 rv8803 = { git = "https://github.com/bsodmike/rv8803-rs" }
 # rv8803 = { path = "/Users/mdesilva/fetch/code/rust-esp32-xtensa/rv8803-rs" }

@@ -8,7 +8,10 @@ use crate::{
     },
     utils::interrupt_free,
 };
-use alloc::{boxed::Box, string::String};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+};
 use core::cell::RefCell;
 #[allow(unused_imports)]
 use embassy_executor::{Executor, Spawner};
@@ -140,8 +143,10 @@ async fn main(spawner: Spawner) {
 async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::peripherals::USART1>) {
     info!("Reading...");
 
-    const LEADER: &str = "+";
-    const CRLF: &str = "\r\n";
+    const LEADER: char = '+';
+    const CR: char = '\r';
+    const LF: char = '\n';
+    // \+([\w\:\s\-\_\,]+)\n
 
     loop {
         let mut buf = [0; USART_READ_BUF_SIZE];
@@ -151,6 +156,35 @@ async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::per
             Ok(response) => {
                 info!("Received response (Bytes): {}", &buf);
                 warn!("Received response: {}", &response.as_str());
+
+                let mut words: alloc::vec::Vec<String> = alloc::vec::Vec::default();
+                for character in response.chars().into_iter() {
+                    // if character != CR && character != LF {
+                    //     let s = character.to_string();
+                    //     words.push(s);
+                    // }
+
+                    // if character == LF {
+                    //     words.push(String::from("\0"));
+                    // }
+                }
+
+                // FIXME this strips out the double \0\0 padding (converted from \r\n)
+                // let intermediary = words.concat();
+                // let mut words: alloc::vec::Vec<String> = alloc::vec::Vec::default();
+                // for el in intermediary.chars().into_iter() {
+                //     if el != '\0' {
+                //         words.push(el.to_string());
+                //     }
+                // }
+
+                let full_message = words.concat();
+
+                // FIXME need to only take sub-strings that start and end between a '+' sign.
+                // let v: alloc::vec::Vec<&str> = full_message.split('+').collect();
+                // let full_message = v.concat();
+                warn!("Received words: {}", full_message.as_str());
+                info!("Received words: {}", full_message.as_bytes());
             }
             Err(_e) => {
                 defmt::unimplemented!()
