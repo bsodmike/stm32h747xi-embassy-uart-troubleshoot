@@ -80,6 +80,8 @@ bind_interrupts!(struct USART1Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
 });
 
+pub const USART_BAUD: u32 = 115200;
+pub const USART_READ_BUF_SIZE: usize = 32;
 pub static MESSAGE: critical_section::Mutex<RefCell<Option<String>>> =
     critical_section::Mutex::new(RefCell::new(None));
 pub static TEMP_BUF: Lazy<critical_section::Mutex<RefCell<Box<[u8; 8]>>>> =
@@ -116,28 +118,19 @@ async fn main(spawner: Spawner) {
     let tx_buf = &mut TX_BUF.init([0; 16])[..];
     static RX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
     let rx_buf = &mut RX_BUF.init([0; 16])[..];
-    let uart = BufferedUart::new(
-        uart,
-        USART1Irqs,
-        rx_pin,
-        tx_pin,
-        tx_buf,
-        rx_buf,
-        Config::default(),
-    )
-    .expect("Create UART");
+    let mut config = embassy_stm32::usart::Config::default();
+    config.baudrate = USART_BAUD;
+    let uart = BufferedUart::new(uart, USART1Irqs, rx_pin, tx_pin, tx_buf, rx_buf, config)
+        .expect("Create UART");
     let (mut tx, rx) = uart.split();
 
     unwrap!(spawner.spawn(buffered_uart_reader(rx)));
 
     info!("Writing...");
     loop {
-        let data = [
-            1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31,
-        ];
+        let data = b"ATB\r\n";
         info!("TX {:?}", data);
-        tx.write_all(&data).await.unwrap();
+        tx.write_all(data).await.unwrap();
         Timer::after_secs(1).await;
     }
 }
@@ -145,10 +138,23 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::peripherals::USART1>) {
     info!("Reading...");
+
+    const LEADER: &str = "+";
+    const CRLF: &str = "\r\n";
+
     loop {
-        let mut buf = [0; 31];
+        let mut buf = [0; USART_READ_BUF_SIZE];
+
         rx.read_exact(&mut buf).await.unwrap();
-        info!("RX {:?}", buf);
+        match String::from_utf8(buf.to_vec()) {
+            Ok(response) => {
+                info!("Received response (Bytes): {}", &buf);
+                warn!("Received response: {}", &response.as_str());
+            }
+            Err(_e) => {
+                unimplemented!()
+            }
+        }
     }
 }
 
@@ -157,13 +163,13 @@ pub async fn usart_task(r: USART1Resource) {
     info!("Running task: usart_task");
 
     let mut config = embassy_stm32::usart::Config::default();
-    config.baudrate = 115200;
+    config.baudrate = USART_BAUD;
     let mut usart = defmt::unwrap!(embassy_stm32::usart::Uart::new_blocking(
         r.peri, r.rx, r.tx, config
     ));
 
     // write once
-    unwrap!(usart.blocking_write(b"Hello from Rust!\0\r\n"));
+    unwrap!(usart.blocking_write(b"ATB\r\n"));
     unwrap!(usart.blocking_flush());
     debug!("usart_task: Completed blocking write");
 
