@@ -135,6 +135,7 @@ async fn main(spawner: Spawner) {
     }
 }
 
+#[allow(dead_code)]
 #[embassy_executor::task]
 async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::peripherals::USART1>) {
     info!("Reading...");
@@ -152,7 +153,7 @@ async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::per
                 warn!("Received response: {}", &response.as_str());
             }
             Err(_e) => {
-                unimplemented!()
+                defmt::unimplemented!()
             }
         }
     }
