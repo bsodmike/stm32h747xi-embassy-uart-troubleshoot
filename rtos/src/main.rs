@@ -158,7 +158,55 @@ async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::per
                 warn!("Received response: {}", &response.as_str());
 
                 let mut words: alloc::vec::Vec<String> = alloc::vec::Vec::default();
-                for character in response.chars().into_iter() {
+                let chars = response.chars();
+                let mut peekable_iter = response.bytes().peekable();
+                let bytes_len = response.bytes().len();
+                let mut current = 0usize;
+                let mut start = 0usize;
+                let mut end = 0usize;
+                let mut found_word = false;
+
+                let mut collected: alloc::vec::Vec<String> = alloc::vec::Vec::default();
+                let mut final_collected: alloc::vec::Vec<(String, usize, usize)> =
+                    alloc::vec::Vec::default();
+                for index in 0..bytes_len {
+                    if let Some(val) = peekable_iter.peek() {
+                        let v: alloc::vec::Vec<u8> = alloc::vec![*val];
+                        if let Ok(s) = core::str::from_utf8(&v[..]) {
+                            if s == "+" {
+                                start = current;
+                            }
+                            if s == "\r" {
+                                end = current;
+                                found_word = true;
+                            }
+                        }
+                    }
+
+                    if !found_word {
+                        if let Some(val) = peekable_iter.next() {
+                            let v: alloc::vec::Vec<u8> = alloc::vec![val];
+                            if let Ok(s) = core::str::from_utf8(&v[..]) {
+                                collected.push(s.to_string());
+                                current += 1;
+                            }
+                        }
+                    } else {
+                        final_collected.push((collected.concat(), start, end));
+
+                        for (found, start, end) in &final_collected {
+                            warn!(
+                                "Found words: {}, Start: {}, End: {}",
+                                found.as_str(),
+                                &start,
+                                &end
+                            );
+                            info!("Found words: {}", found.as_bytes());
+                        }
+                    }
+                }
+
+                for character in response.bytes().peekable() {
                     // if character != CR && character != LF {
                     //     let s = character.to_string();
                     //     words.push(s);
@@ -167,6 +215,13 @@ async fn buffered_uart_reader(mut rx: BufferedUartRx<'static, embassy_stm32::per
                     // if character == LF {
                     //     words.push(String::from("\0"));
                     // }
+                    let mut slice_count: u32 = 0;
+                    // if character == LEADER {}
+
+                    let v: alloc::vec::Vec<u8> = alloc::vec![character];
+                    if let Ok(val) = core::str::from_utf8(&v) {
+                        // character.
+                    }
                 }
 
                 // FIXME this strips out the double \0\0 padding (converted from \r\n)
